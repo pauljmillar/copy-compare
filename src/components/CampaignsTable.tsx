@@ -119,7 +119,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
             {...materialTailwindProps}
           />
         </div>
-        <Typography variant="small" color="gray" className="font-normal">
+        <Typography variant="small" color="gray" className="font-normal" {...materialTailwindProps}>
           {totalCount} {totalCount === 1 ? "campaign" : "campaigns"}
         </Typography>
       </div>
@@ -147,6 +147,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                       variant="small"
                       color="blue-gray"
                       className="font-normal"
+                      {...materialTailwindProps}
                     >
                       {head.label}
                     </Typography>
@@ -157,6 +158,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                     variant="small"
                     color="blue-gray"
                     className="font-normal leading-none opacity-70"
+                    {...materialTailwindProps}
                   >
                     {head.label}
                   </Typography>
@@ -186,6 +188,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                       variant="small"
                       color="blue-gray"
                       className="font-normal"
+                      {...materialTailwindProps}
                     >
                       {campaign.company_name}
                     </Typography>
@@ -195,6 +198,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                       variant="small"
                       color="blue-gray"
                       className="font-normal"
+                      {...materialTailwindProps}
                     >
                       {campaign.channel}
                     </Typography>
@@ -204,6 +208,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                       variant="small"
                       color="blue-gray"
                       className="font-normal"
+                      {...materialTailwindProps}
                     >
                       {campaign.occurrences}
                     </Typography>
@@ -213,6 +218,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                       variant="small"
                       color="blue-gray"
                       className="font-normal text-xs"
+                      {...materialTailwindProps}
                     >
                       {truncateText(campaign.body, 200)}
                     </Typography>
