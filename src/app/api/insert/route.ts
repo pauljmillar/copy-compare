@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let data, error;
+    let error;
     try {
       console.log("[Insert] Attempting to insert campaign...");
       const result = await supabase.from("campaigns").insert({
@@ -44,7 +44,6 @@ export async function POST(req: NextRequest) {
         body: payload.body,
         occurrences: 1,
       });
-      data = result.data;
       error = result.error;
       
       if (error) {
@@ -53,7 +52,6 @@ export async function POST(req: NextRequest) {
           details: error.details,
           hint: error.hint,
           code: error.code,
-          status: error.status,
           // Log the full error object to see what's actually there
           fullError: JSON.stringify(error, Object.getOwnPropertyNames(error)),
           errorKeys: Object.keys(error),
@@ -86,7 +84,6 @@ export async function POST(req: NextRequest) {
           details: error.details || null,
           hint: error.hint || null,
           code: error.code || null,
-          status: error.status || null,
         },
         { status: 500 },
       );

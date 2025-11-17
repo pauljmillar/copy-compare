@@ -7,7 +7,6 @@ import {
   type ChangeEventHandler,
   type FormEventHandler,
 } from "react";
-import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
 import type { CampaignMatch } from "@/lib/types";
 import { HighlightedText } from "@/components/HighlightedText";
 

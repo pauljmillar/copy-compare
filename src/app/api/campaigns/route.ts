@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabaseServer";
-import type { CampaignRecord } from "@/lib/types";
 
 export const runtime = "nodejs";
 

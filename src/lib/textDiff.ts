@@ -59,10 +59,8 @@ export function findMatchingWords(text1: string, text2: string): HighlightSegmen
     text.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
   
   const normalized1 = normalize(text1);
-  const normalized2 = normalize(text2);
   
   const words1 = normalized1.split(/\s+/);
-  const words2 = normalized2.split(/\s+/);
   
   // Create a set of words from text1 for quick lookup
   const words1Set = new Set(words1);
