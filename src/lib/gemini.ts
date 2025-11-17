@@ -138,14 +138,82 @@ Be strict: only mark as similar if the images appear to be from the same campaig
     // Try to extract JSON from the response
     let comparisonResult: ImageComparisonResult;
     try {
-      // Look for JSON in the response (might be wrapped in markdown code blocks)
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        comparisonResult = JSON.parse(jsonMatch[0]);
+      // First, try to extract JSON from markdown code blocks (```json ... ```)
+      let jsonText = text;
+      
+      // Remove markdown code block markers if present (handle both objects and arrays)
+      const codeBlockMatch = text.match(/```(?:json)?\s*([\[\{][\s\S]*?[\]\}])\s*```/);
+      if (codeBlockMatch) {
+        jsonText = codeBlockMatch[1];
       } else {
-        throw new Error("No JSON found in response");
+        // Try to find JSON in the text (could be object {} or array [{}])
+        // First try array, then object
+        const arrayStart = text.indexOf('[');
+        const objectStart = text.indexOf('{');
+        
+        let jsonStart = -1;
+        let isArray = false;
+        
+        // Prefer array if both exist and array comes first
+        if (arrayStart !== -1 && (objectStart === -1 || arrayStart < objectStart)) {
+          jsonStart = arrayStart;
+          isArray = true;
+        } else if (objectStart !== -1) {
+          jsonStart = objectStart;
+          isArray = false;
+        }
+        
+        if (jsonStart !== -1) {
+          // Find the matching closing bracket/brace
+          let bracketCount = 0;
+          let jsonEnd = jsonStart;
+          const openChar = isArray ? '[' : '{';
+          const closeChar = isArray ? ']' : '}';
+          
+          for (let i = jsonStart; i < text.length; i++) {
+            if (text[i] === openChar) bracketCount++;
+            if (text[i] === closeChar) bracketCount--;
+            if (bracketCount === 0) {
+              jsonEnd = i + 1;
+              break;
+            }
+          }
+          if (bracketCount === 0) {
+            jsonText = text.substring(jsonStart, jsonEnd);
+          }
+        }
       }
+
+      // Try to parse the extracted JSON
+      const parsed = JSON.parse(jsonText);
+      
+      // Handle case where Gemini returns an array instead of an object
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        comparisonResult = parsed[0];
+      } else if (typeof parsed === 'object' && parsed !== null) {
+        comparisonResult = parsed;
+      } else {
+        throw new Error("Invalid JSON structure");
+      }
+      
+      // Validate the result has required fields
+      if (typeof comparisonResult.isSimilar !== 'boolean') {
+        throw new Error("Missing isSimilar field");
+      }
+      if (typeof comparisonResult.confidence !== 'number') {
+        throw new Error("Missing or invalid confidence field");
+      }
+      if (!comparisonResult.reasoning) {
+        comparisonResult.reasoning = "Comparison completed";
+      }
+      if (!comparisonResult.details) {
+        comparisonResult.details = comparisonResult.reasoning;
+      }
+      
     } catch (parseError) {
+      console.warn("Failed to parse Gemini JSON response, attempting fallback:", parseError);
+      console.warn("Response text:", text.substring(0, 500));
+      
       // Fallback: try to parse the entire response
       try {
         comparisonResult = JSON.parse(text);
