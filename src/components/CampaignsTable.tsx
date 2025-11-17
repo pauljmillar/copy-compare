@@ -87,9 +87,18 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
     );
   };
 
+  // Material Tailwind Card requires these props for TypeScript
+  const cardProps = {
+    placeholder: undefined,
+    onResize: undefined,
+    onResizeCapture: undefined,
+    onPointerEnterCapture: undefined,
+    onPointerLeaveCapture: undefined,
+  };
+
   if (loading && campaigns.length === 0) {
     return (
-      <Card className="h-full w-full overflow-scroll">
+      <Card className="h-full w-full overflow-scroll" {...cardProps}>
         <div className="p-8 text-center text-slate-600">
           Loading campaigns...
         </div>
@@ -98,7 +107,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
   }
 
   return (
-    <Card className="h-full w-full overflow-scroll">
+    <Card className="h-full w-full overflow-scroll" {...cardProps}>
       <div className="mb-4 flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
         <div className="w-full md:w-72">
           <Input
