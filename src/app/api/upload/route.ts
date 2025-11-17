@@ -70,11 +70,33 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Process all files and merge OCR text, also store image buffers
+    // Sort files by sequence number if they have the same base name
+    // Example: abc_0.jpeg, abc_1.jpeg, abc_2.jpeg -> sorted by _0, _1, _2
+    const sortedFiles = [...files].sort((a, b) => {
+      const nameA = a.name;
+      const nameB = b.name;
+      
+      // Extract base name and sequence number
+      // Pattern: <base>_<number>.<ext>
+      const matchA = nameA.match(/^(.+)_(\d+)\.([^.]+)$/);
+      const matchB = nameB.match(/^(.+)_(\d+)\.([^.]+)$/);
+      
+      // If both match the pattern and have the same base name, sort by sequence number
+      if (matchA && matchB && matchA[1] === matchB[1]) {
+        const seqA = parseInt(matchA[2], 10);
+        const seqB = parseInt(matchB[2], 10);
+        return seqA - seqB;
+      }
+      
+      // Otherwise, maintain original order (alphabetical by filename)
+      return nameA.localeCompare(nameB);
+    });
+
+    // Process all files in sorted order and merge OCR text, also store image buffers
     const ocrTexts: string[] = [];
     const uploadedImageBuffers: Buffer[] = [];
     
-    for (const file of files) {
+    for (const file of sortedFiles) {
       try {
         const buffer = Buffer.from(await file.arrayBuffer());
         
@@ -179,7 +201,12 @@ export async function POST(req: NextRequest) {
               }
 
               // Compare images using Gemini
-              console.log(`Comparing images for match ${match.id} using Gemini...`);
+              // Images are sent in order: uploaded images first, then database images
+              // When counts match (e.g., 3 uploaded + 3 database), Gemini compares them sequentially:
+              //   uploaded[0] vs database[0], uploaded[1] vs database[1], uploaded[2] vs database[2]
+              // This ensures sequential images (new_1.jpg, new_2.jpg, new_3.jpg) are compared
+              // to their corresponding database images (existing_1.jpg, existing_2.jpg, existing_3.jpg)
+              console.log(`Comparing ${uploadedImageBuffers.length} uploaded image(s) with ${databaseImageBuffers.length} database image(s) for match ${match.id} using Gemini...`);
               const comparison = await compareImagesWithGemini(
                 uploadedImageBuffers,
                 databaseImageBuffers,

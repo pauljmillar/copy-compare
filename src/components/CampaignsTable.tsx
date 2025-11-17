@@ -6,7 +6,6 @@ import {
   Typography,
   Input,
 } from "@material-tailwind/react";
-import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import type { CampaignRecord } from "@/lib/types";
 
 type SortField = "company_name" | "campaign" | "channel" | "sent_at" | "occurrences";
@@ -104,10 +103,10 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
         <div className="w-full md:w-72">
           <Input
             label="Search campaigns"
-            icon={<MagnifyingGlassIcon className="h-5 w-5" />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             crossOrigin={undefined}
+            className="rounded-lg"
           />
         </div>
         <Typography variant="small" color="gray" className="font-normal">

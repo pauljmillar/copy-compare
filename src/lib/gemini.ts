@@ -81,15 +81,31 @@ export async function compareImagesWithGemini(
       },
     }));
 
+    // Build prompt with explicit image pairing instructions
+    let imagePairingInstructions = "";
+    if (uploadedImages.length === databaseImages.length && uploadedImages.length > 1) {
+      // Same number of images - compare in sequence pairs
+      imagePairingInstructions = `\n\nIMPORTANT: These are sequential images. Compare them in pairs by position:\n`;
+      for (let i = 0; i < uploadedImages.length; i++) {
+        imagePairingInstructions += `- Uploaded image ${i + 1} should be compared with Database image ${i + 1}\n`;
+      }
+      imagePairingInstructions += `Do NOT compare uploaded images to each other. Only compare each uploaded image to its corresponding database image by position.`;
+    } else if (uploadedImages.length > 1 || databaseImages.length > 1) {
+      // Different counts or multiple images - provide general guidance
+      imagePairingInstructions = `\n\nNote: There are ${uploadedImages.length} uploaded image(s) and ${databaseImages.length} database image(s). Compare the uploaded images as a set against the database images as a set.`;
+    }
+
     const prompt = `You are an expert at comparing marketing campaign images. Compare the uploaded campaign images with the database campaign images.
 
-Uploaded images: ${uploadedImages.length} image(s)
-Database images: ${databaseImages.length} image(s)
+Uploaded images: ${uploadedImages.length} image(s) (shown first, in order)
+Database images: ${databaseImages.length} image(s) (shown after uploaded images, in order)
+${imagePairingInstructions}
 
 Analyze:
 1. Visual similarity (layout, design, colors, fonts)
 2. Content similarity (text, messaging, branding)
 3. Overall campaign match likelihood
+${uploadedImages.length === databaseImages.length && uploadedImages.length > 1 ? '4. Compare images in sequential pairs (uploaded image 1 vs database image 1, uploaded image 2 vs database image 2, etc.)' : ''}
 
 Respond with a JSON object in this exact format:
 {
@@ -101,10 +117,18 @@ Respond with a JSON object in this exact format:
 
 Be strict: only mark as similar if the images appear to be from the same campaign or very similar campaigns.`;
 
+    // Send images in order: uploaded images first, then database images
+    // This makes it clear which images correspond to which when comparing sequences
     const parts = [
       { text: prompt },
-      ...uploadedBase64,
-      ...databaseBase64,
+      ...uploadedBase64.map((img, idx) => ({
+        ...img,
+        // Add a label hint in the data (Gemini can't see this, but it helps with organization)
+      })),
+      ...databaseBase64.map((img, idx) => ({
+        ...img,
+        // Add a label hint in the data (Gemini can't see this, but it helps with organization)
+      })),
     ];
 
     const result = await model.generateContent({ contents: [{ role: "user", parts }] });
