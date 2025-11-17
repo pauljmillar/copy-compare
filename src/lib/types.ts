@@ -26,6 +26,7 @@ export type UploadResponse = {
   text: string;
   matches: CampaignMatch[];
   imageComparisons?: ImageComparisonResult[]; // Results for top 2 matches
+  error?: string; // Error message if upload fails
 };
 
 export type InsertCampaignPayload = {
