@@ -87,8 +87,8 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
     );
   };
 
-  // Material Tailwind Card requires these props for TypeScript
-  const cardProps = {
+  // Material Tailwind components require these props for TypeScript
+  const materialTailwindProps = {
     placeholder: undefined,
     onResize: undefined,
     onResizeCapture: undefined,
@@ -98,7 +98,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
 
   if (loading && campaigns.length === 0) {
     return (
-      <Card className="h-full w-full overflow-scroll" {...cardProps}>
+      <Card className="h-full w-full overflow-scroll" {...materialTailwindProps}>
         <div className="p-8 text-center text-slate-600">
           Loading campaigns...
         </div>
@@ -107,7 +107,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
   }
 
   return (
-    <Card className="h-full w-full overflow-scroll" {...cardProps}>
+    <Card className="h-full w-full overflow-scroll" {...materialTailwindProps}>
       <div className="mb-4 flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
         <div className="w-full md:w-72">
           <Input
@@ -116,6 +116,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
             onChange={(e) => setSearch(e.target.value)}
             crossOrigin={undefined}
             className="rounded-lg"
+            {...materialTailwindProps}
           />
         </div>
         <Typography variant="small" color="gray" className="font-normal">
