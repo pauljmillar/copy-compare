@@ -7,7 +7,7 @@ import {
   type ChangeEventHandler,
   type FormEventHandler,
 } from "react";
-import type { CampaignMatch } from "@/lib/types";
+import type { CampaignMatch, ImageComparisonResult, UploadResponse } from "@/lib/types";
 import { HighlightedText } from "@/components/HighlightedText";
 
 type Step = "upload" | "review" | "new-record" | "success";
@@ -35,6 +35,8 @@ export function UploadModal({ onSuccess }: UploadModalProps) {
   const [step, setStep] = useState<Step>("upload");
   const [ocrText, setOcrText] = useState("");
   const [matches, setMatches] = useState<CampaignMatch[]>([]);
+  const [imageComparisons, setImageComparisons] = useState<ImageComparisonResult[]>([]);
+  const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +61,8 @@ export function UploadModal({ onSuccess }: UploadModalProps) {
     setStep("upload");
     setOcrText("");
     setMatches([]);
+    setImageComparisons([]);
+    setUploadedImageUrls([]);
     setError(null);
     setSuccessMessage(null);
     setIsLoading(false);
@@ -105,6 +109,19 @@ export function UploadModal({ onSuccess }: UploadModalProps) {
     setSuccessMessage(null);
 
     try {
+      // Convert files to base64 data URLs for storage
+      const imageUrls: string[] = [];
+      for (const file of Array.from(files)) {
+        const reader = new FileReader();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        imageUrls.push(dataUrl);
+      }
+      setUploadedImageUrls(imageUrls);
+
       const formData = new FormData();
       // Append all selected files
       for (let i = 0; i < files.length; i++) {
@@ -116,7 +133,7 @@ export function UploadModal({ onSuccess }: UploadModalProps) {
         body: formData,
       });
 
-      const payload = await response.json();
+      const payload: UploadResponse = await response.json();
 
       if (!response.ok) {
         throw new Error(payload.error ?? "Failed to process upload.");
@@ -124,6 +141,7 @@ export function UploadModal({ onSuccess }: UploadModalProps) {
 
       setOcrText(payload.text);
       setMatches(payload.matches ?? []);
+      setImageComparisons(payload.imageComparisons ?? []);
       setStep("review");
     } catch (err) {
       console.error(err);
@@ -207,6 +225,7 @@ export function UploadModal({ onSuccess }: UploadModalProps) {
           ...formValues,
           sent_at: sentAtIso,
           body: ocrText,
+          image_urls: uploadedImageUrls,
         }),
       });
 
@@ -337,24 +356,76 @@ export function UploadModal({ onSuccess }: UploadModalProps) {
                       <ul className="space-y-3">
                         {matches.map((match) => {
                           const isExpanded = expandedMatches.has(match.id);
+                          const imageComparison = imageComparisons.find(
+                            (comp) => comp.matchId === match.id,
+                          );
+                          const similarityPercent = Math.round(match.similarity * 100);
+                          const isVeryLikelyCopy =
+                            similarityPercent > 90 &&
+                            imageComparison?.isSimilar &&
+                            imageComparison.confidence > 0.7;
+
                           return (
                             <li
                               key={match.id}
-                              className="rounded-lg border border-slate-200 p-4 shadow-sm"
+                              className={`rounded-lg border p-4 shadow-sm ${
+                                isVeryLikelyCopy
+                                  ? "border-green-300 bg-green-50"
+                                  : "border-slate-200"
+                              }`}
                             >
                               <div className="flex flex-wrap items-start justify-between gap-2">
-                                <div>
-                                  <p className="text-sm font-semibold text-slate-900">
-                                    {match.company_name}
-                                  </p>
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-semibold text-slate-900">
+                                      {match.company_name}
+                                    </p>
+                                    {isVeryLikelyCopy && (
+                                      <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">
+                                        ⚠️ Very Likely a Copy
+                                      </span>
+                                    )}
+                                  </div>
                                   <p className="text-sm text-slate-600">
                                     {match.campaign} · {match.channel}
                                   </p>
                                 </div>
                                 <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600">
-                                  {Math.round(match.similarity * 100)}% match
+                                  {similarityPercent}% match
                                 </span>
                               </div>
+
+                              {imageComparison && (
+                                <div className="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1">
+                                      <p className="text-xs font-semibold text-slate-700">
+                                        Image Comparison (Gemini 1.5 Flash)
+                                      </p>
+                                      <p
+                                        className={`mt-1 text-xs font-medium ${
+                                          imageComparison.isSimilar
+                                            ? "text-emerald-700"
+                                            : "text-slate-600"
+                                        }`}
+                                      >
+                                        {imageComparison.isSimilar
+                                          ? "✓ Images are similar"
+                                          : "✗ Images are different"}
+                                      </p>
+                                      <p className="mt-1 text-xs text-slate-600">
+                                        Confidence:{" "}
+                                        {Math.round(imageComparison.confidence * 100)}%
+                                      </p>
+                                      {imageComparison.reasoning && (
+                                        <p className="mt-2 text-xs text-slate-600">
+                                          {imageComparison.reasoning}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                               
                               <div className="mt-3">
                                 {isExpanded ? (

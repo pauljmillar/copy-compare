@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
         sent_at: payload.sent_at ?? new Date().toISOString(),
         body: payload.body,
         occurrences: 1,
+        image_urls: payload.image_urls ?? [],
       });
       error = result.error;
       

@@ -12,7 +12,8 @@ create table if not exists campaigns (
   channel text not null,
   sent_at timestamptz not null default now(),
   body text not null,
-  occurrences integer not null default 0
+  occurrences integer not null default 0,
+  image_urls text[] default '{}' -- Array of base64 data URLs or file URLs
 );
 
 -- Create the trigram index for fast similarity search
@@ -29,12 +30,20 @@ returns table (
   sent_at timestamptz,
   body text,
   occurrences integer,
+  image_urls text[],
   similarity real
 )
 language sql stable
 as $$
   select
-    c.*,
+    c.id,
+    c.company_name,
+    c.campaign,
+    c.channel,
+    c.sent_at,
+    c.body,
+    c.occurrences,
+    coalesce(c.image_urls, '{}'::text[]) as image_urls,
     similarity(c.body, q) as similarity
   from campaigns c
   where q is not null

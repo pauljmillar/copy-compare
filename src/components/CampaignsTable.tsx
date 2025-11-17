@@ -88,25 +88,9 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
     );
   };
 
-  // Helper to add required Material Tailwind props
-  const mtProps = {
-    placeholder: undefined,
-    onResize: undefined,
-    onResizeCapture: undefined,
-    onPointerEnterCapture: undefined,
-    onPointerLeaveCapture: undefined,
-  };
-
   if (loading && campaigns.length === 0) {
     return (
-      <Card 
-        className="h-full w-full overflow-scroll" 
-        placeholder={undefined}
-        onResize={undefined}
-        onResizeCapture={undefined}
-        onPointerEnterCapture={undefined}
-        onPointerLeaveCapture={undefined}
-      >
+      <Card className="h-full w-full overflow-scroll">
         <div className="p-8 text-center text-slate-600">
           Loading campaigns...
         </div>
@@ -115,14 +99,7 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
   }
 
   return (
-    <Card 
-      className="h-full w-full overflow-scroll" 
-      placeholder={undefined}
-      onResize={undefined}
-      onResizeCapture={undefined}
-      onPointerEnterCapture={undefined}
-      onPointerLeaveCapture={undefined}
-    >
+    <Card className="h-full w-full overflow-scroll">
       <div className="mb-4 flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
         <div className="w-full md:w-72">
           <Input
@@ -131,13 +108,9 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             crossOrigin={undefined}
-            onResize={undefined}
-            onResizeCapture={undefined}
-            onPointerEnterCapture={undefined}
-            onPointerLeaveCapture={undefined}
           />
         </div>
-        <Typography variant="small" color="gray" className="font-normal" {...mtProps}>
+        <Typography variant="small" color="gray" className="font-normal">
           {totalCount} {totalCount === 1 ? "campaign" : "campaigns"}
         </Typography>
       </div>
@@ -165,7 +138,6 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                       variant="small"
                       color="blue-gray"
                       className="font-normal"
-                      {...mtProps}
                     >
                       {head.label}
                     </Typography>
@@ -176,7 +148,6 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                     variant="small"
                     color="blue-gray"
                     className="font-normal leading-none opacity-70"
-                    {...mtProps}
                   >
                     {head.label}
                   </Typography>
@@ -206,7 +177,6 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                       variant="small"
                       color="blue-gray"
                       className="font-normal"
-                      {...mtProps}
                     >
                       {campaign.company_name}
                     </Typography>
@@ -216,7 +186,6 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                       variant="small"
                       color="blue-gray"
                       className="font-normal"
-                      {...mtProps}
                     >
                       {campaign.channel}
                     </Typography>
@@ -226,7 +195,6 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                       variant="small"
                       color="blue-gray"
                       className="font-normal"
-                      {...mtProps}
                     >
                       {campaign.occurrences}
                     </Typography>
@@ -236,7 +204,6 @@ export function CampaignsTable({ refreshTrigger = 0 }: CampaignsTableProps) {
                       variant="small"
                       color="blue-gray"
                       className="font-normal text-xs"
-                      {...mtProps}
                     >
                       {truncateText(campaign.body, 200)}
                     </Typography>

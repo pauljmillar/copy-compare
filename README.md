@@ -6,6 +6,7 @@ Upload marketing collateral, extract the copy with AWS Textract, and compare the
 - `next@16` (App Router, TypeScript, Tailwind CSS v4)
 - Supabase Postgres + `pg_trgm` for similarity search
 - AWS Textract (DetectDocumentText) for OCR
+- Google Gemini 2.0 Flash (experimental) for image comparison
 - API routes with server-only Supabase service role access
 - Zod for request validation
 
@@ -15,6 +16,7 @@ Upload marketing collateral, extract the copy with AWS Textract, and compare the
 - Node.js 18.18+ / 20+ (matches the Next.js requirement)
 - Supabase project with Postgres extensions enabled
 - AWS account with Textract permissions
+- Google Cloud account with Gemini API access
 
 ---
 
@@ -33,6 +35,8 @@ cp .env.example .env.local
 | `AWS_REGION` | Region that Textract runs in |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | IAM credentials with Textract access |
 | `AWS_SESSION_TOKEN` | Optional session token if you use temporary credentials |
+| `GOOGLE_GEMINI_API_KEY` | Google Gemini API key for image comparison |
+| `GEMINI_USE_EXPERIMENTAL` | Set to `"true"` to use gemini-2.0-flash-exp (requires paid tier billing) |
 
 Never expose the service role key to the browser. It is used only inside server routes and actions.
 
@@ -51,7 +55,8 @@ create table if not exists campaigns (
   channel text not null,
   sent_at timestamptz not null default now(),
   body text not null,
-  occurrences integer not null default 0
+  occurrences integer not null default 0,
+  image_urls text[] default '{}' -- Array of base64 data URLs or file URLs
 );
 
 create index if not exists idx_campaigns_body_trgm
@@ -66,12 +71,20 @@ returns table (
   sent_at timestamptz,
   body text,
   occurrences integer,
+  image_urls text[],
   similarity real
 )
 language sql stable
 as $$
   select
-    c.*,
+    c.id,
+    c.company_name,
+    c.campaign,
+    c.channel,
+    c.sent_at,
+    c.body,
+    c.occurrences,
+    coalesce(c.image_urls, '{}'::text[]) as image_urls,
     similarity(c.body, q) as similarity
   from campaigns c
   where q is not null
@@ -96,7 +109,13 @@ Visit [http://localhost:3000](http://localhost:3000) to access the workflow:
 1. Click **Upload Campaign** to open the modal.
 2. Select a PDF or image; AWS Textract extracts text server-side.
 3. Review up to five similar campaigns returned by Supabase.
-4. Confirm a match to increment occurrences, or add a new campaign.
+4. For the top 2 matches:
+   - If a match doesn't have images stored, the uploaded images are automatically saved to that record
+   - Gemini 2.0 Flash compares the uploaded images with stored images
+5. If similarity > 90% and Gemini confirms image similarity, the UI indicates "Very Likely a Copy".
+6. Confirm a match to increment occurrences, or add a new campaign.
+
+**Image Storage:** Images are stored as base64 data URLs in the database. For production with large files, consider migrating to S3/Supabase Storage.
 
 ### Testing API Routes
 - Upload endpoint: `POST /api/upload` (multipart form, `file` field).

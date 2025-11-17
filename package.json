@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-textract": "^3.929.0",
+    "@google/generative-ai": "^0.24.1",
     "@heroicons/react": "^2.2.0",
     "@material-tailwind/react": "^2.1.10",
     "@supabase/supabase-js": "^2.81.1",
