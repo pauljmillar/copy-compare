@@ -51,6 +51,264 @@ create index idx_campaigns_body_trgm
 - Index lookup finds all records containing these trigrams
 - Records with more matching trigrams = higher similarity score
 
+#### Technical Deep Dive: GIN Index Structure
+
+**What is an Inverted Index?**
+
+A traditional index maps: `Record ID → Data`
+```
+Record 123 → "Save 50% on premium services"
+Record 456 → "Get 30% off today"
+Record 789 → "Save big on services"
+```
+
+An **inverted index** flips this: `Token → [Record IDs]`
+```
+" Sa" → [123, 789]
+"Sav" → [123, 789]
+"ave" → [123]
+"ve " → [123]
+" 50" → [123]
+"50%" → [123]
+"Get" → [456]
+" 30" → [456]
+"30%" → [456]
+"big" → [789]
+...
+```
+
+**How GIN Index Stores Trigrams:**
+
+1. **Index Creation (One-time):**
+   - PostgreSQL scans all existing records in the `body` column
+   - For each record, extracts all trigrams from the text
+   - Builds the inverted mapping: `trigram → [record_ids]`
+   - Stores this in a B-tree structure for fast lookups
+
+2. **On INSERT:**
+   ```
+   INSERT INTO campaigns (body) VALUES ('Save 50% on premium services');
+   ```
+   - PostgreSQL extracts trigrams: `" Sa"`, `"Sav"`, `"ave"`, `"ve "`, `" 50"`, `"50%"`, `"% o"`, `" on"`, etc.
+   - For each trigram, adds the new record ID to its posting list:
+     - `" Sa"` → [..., new_id]
+     - `"Sav"` → [..., new_id]
+     - `"ave"` → [..., new_id]
+     - etc.
+   - This happens automatically - no application code needed
+
+3. **On UPDATE:**
+   - Old trigrams are removed from their posting lists
+   - New trigrams are added to their posting lists
+   - Only changed trigrams are updated (efficient)
+
+4. **On DELETE:**
+   - Record ID is removed from all trigram posting lists
+   - Index entries with empty lists may be cleaned up
+
+**Query Execution Process:**
+
+When you search: `SELECT * FROM campaigns WHERE body % 'Save 50%'`
+
+1. **Query Trigram Extraction:**
+   - Query text: `"Save 50%"`
+   - Trigrams: `" Sa"`, `"Sav"`, `"ave"`, `"ve "`, `" 50"`, `"50%"`
+
+2. **Index Lookups (Parallel):**
+   ```
+   Lookup " Sa" → [123, 789, 1011, ...]
+   Lookup "Sav" → [123, 789, ...]
+   Lookup "ave" → [123, 456, 789, ...]
+   Lookup "ve " → [123, 1011, ...]
+   Lookup " 50" → [123, 2022, ...]
+   Lookup "50%" → [123, ...]
+   ```
+
+3. **Set Intersection:**
+   - Find records that appear in multiple posting lists
+   - Records appearing in more lists = more matching trigrams = higher similarity
+   - Example: Record 123 appears in all 6 lists → high similarity
+   - Record 789 appears in 3 lists → medium similarity
+
+4. **Similarity Calculation:**
+   - For each candidate record, calculate: `matching_trigrams / total_unique_trigrams`
+   - Sort by similarity score (descending)
+   - Return top k results
+
+**Storage Structure:**
+
+The GIN index uses a B-tree structure internally:
+```
+B-tree Root
+├── Trigram " 50" → Posting List [123, 2022, 3033, ...]
+├── Trigram " 30" → Posting List [456, 789, ...]
+├── Trigram " Sa" → Posting List [123, 789, 1011, ...]
+├── Trigram "Sav" → Posting List [123, 789, ...]
+└── ... (sorted alphabetically by trigram)
+```
+
+**Performance Characteristics:**
+
+- **Lookup Time**: O(log n) to find a trigram in the B-tree, then O(m) to read the posting list (where m = number of records with that trigram)
+- **Set Intersection**: Optimized using bitmap operations or sorted list merges
+- **Storage**: Typically 20-50% of the original text column size
+- **Maintenance**: Automatic on INSERT/UPDATE/DELETE (small overhead per operation)
+
+**Why This is Fast:**
+
+1. **No Full Table Scan**: Instead of checking every record, PostgreSQL only looks at records that share trigrams
+2. **Parallel Lookups**: Multiple trigram lookups can happen simultaneously
+3. **Efficient Set Operations**: PostgreSQL uses optimized algorithms for set intersection
+4. **Index-Only Operations**: Similarity calculation can often be done using only the index
+
+**Example Walkthrough:**
+
+Given 3 records:
+- Record 123: `"Save 50% on premium services"`
+- Record 456: `"Get 30% off today"`
+- Record 789: `"Save big on services"`
+
+Query: `"Save 50%"`
+
+**Step 1: Extract query trigrams**
+- `" Sa"`, `"Sav"`, `"ave"`, `"ve "`, `" 50"`, `"50%"`
+
+**Step 2: Index lookups**
+- `" Sa"` → [123, 789]
+- `"Sav"` → [123, 789]
+- `"ave"` → [123]
+- `"ve "` → [123]
+- `" 50"` → [123]
+- `"50%"` → [123]
+
+**Step 3: Count matches per record**
+- Record 123: appears in all 6 lists → 6 matching trigrams
+- Record 789: appears in 2 lists → 2 matching trigrams
+- Record 456: appears in 0 lists → 0 matching trigrams
+
+**Step 4: Calculate similarity**
+- Record 123: 6 matching / ~30 total trigrams ≈ 20% similarity (but with `%` operator, it's actually higher)
+- Record 789: 2 matching / ~25 total trigrams ≈ 8% similarity
+- Record 456: 0 matching → filtered out by `%` operator
+
+**Step 5: Return results**
+- Sorted by similarity: [123, 789]
+
+#### Posting List Growth and Scale
+
+**Yes, posting lists grow with each matching record:**
+
+When a new record is inserted that contains a trigram, that record ID is appended to the posting list:
+
+```
+Initial state:
+" Sa" → [123, 789]
+
+After INSERT INTO campaigns (body) VALUES ('Save big today'):
+" Sa" → [123, 789, 456]  ← New record 456 added
+```
+
+**At scale:**
+- If 1 million records all contain the trigram `" Sa"`, the posting list will contain 1 million record IDs
+- PostgreSQL handles this efficiently using:
+  - **Compressed storage**: Record IDs are stored in sorted order, allowing delta compression
+  - **Bitmap indexes**: For very large lists, PostgreSQL may use bitmap representations
+  - **B-tree structure**: Even with millions of entries, lookups remain O(log n)
+
+**Example at scale:**
+```
+" the" → [1, 2, 3, 4, 5, ..., 999998, 999999, 1000000]  (1M entries)
+" and" → [1, 5, 12, 23, ..., 999995]  (500K entries)
+" Sa" → [123, 789, 1011, 2022, ...]  (10K entries)
+```
+
+The index size grows, but query performance remains fast because:
+- Only relevant trigrams are looked up (not all 1M records)
+- Set intersection operations are highly optimized
+- Most queries only need a small subset of all trigrams
+
+#### Trigrams and Word Order
+
+**Key Point: Trigrams are position-agnostic, but word order still matters indirectly.**
+
+Trigrams don't preserve the original position of words in the text. However, word order affects which trigrams are generated, which in turn affects similarity scores.
+
+**Example: Different word orders**
+
+Text 1: `"I cleaned with Bob"`
+- Trigrams: `" I "`, `" I c"`, `"I c"`, `" cl"`, `"cle"`, `"lea"`, `"ean"`, `"an "`, `"n w"`, `" wi"`, `"wit"`, `"ith"`, `"th "`, `"h B"`, `" Bo"`, `"Bob"`, `"ob "`
+
+Text 2: `"Bob did not clean"`
+- Trigrams: `" Bo"`, `"Bob"`, `"ob "`, `"b d"`, `" di"`, `"did"`, `"id "`, `"d n"`, `" no"`, `"not"`, `"ot "`, `"t c"`, `" cl"`, `"cle"`, `"lea"`, `"ean"`, `"an "`
+
+**Shared trigrams:**
+- `" Bo"`, `"Bob"`, `"ob "` (from "Bob")
+- `" cl"`, `"cle"`, `"lea"`, `"ean"`, `"an "` (from "clean")
+
+**Analysis:**
+- They share 8 trigrams out of ~17-18 total unique trigrams
+- Similarity: ~8/18 ≈ 44% (moderate similarity)
+- The similarity is lower than if the words were in the same order because:
+  - Different word order = different character sequences = different trigrams
+  - `"I cleaned with Bob"` has trigrams like `"ean"`, `"an "`, `"n w"`, `" wi"`, `"wit"`, `"ith"`, `"th "`, `"h B"` that don't exist in `"Bob did not clean"`
+  - `"Bob did not clean"` has trigrams like `"b d"`, `" di"`, `"did"`, `"id "`, `"d n"`, `" no"`, `"not"`, `"ot "`, `"t c"` that don't exist in `"I cleaned with Bob"`
+
+**What this means:**
+- ✅ Trigrams capture partial matches even when word order differs
+- ✅ Common words/phrases still produce high similarity scores
+- ⚠️ Exact word order produces higher similarity than scrambled words
+- ⚠️ Trigrams don't understand semantics - they're purely character-based
+
+**Real-world example:**
+
+Query: `"Save 50% on premium services"`
+
+Match 1: `"Save 50% on premium services"` (exact match)
+- All trigrams match → 100% similarity
+
+Match 2: `"Save 50% on services premium"` (words reordered)
+- Most trigrams match, but the boundary trigrams differ:
+  - Sentence 1: `"um "` (end of "premium" + space), `"m s"` (premium→services), `" se"` (space + start of "services")
+  - Sentence 2: `"es "` (end of "services" + space), `"s p"` (services→premium), `" pr"` (space + start of "premium")
+- These boundary trigrams account for the ~5% difference
+- Similarity: ~95% (very high, but slightly lower)
+
+**Detailed trigram breakdown for "premium services" vs "services premium":**
+
+Sentence 1: `"...premium services..."`
+- Trigrams: `"pre"`, `"rem"`, `"emi"`, `"miu"`, `"ium"`, `"um "`, `"m s"`, `" se"`, `"ser"`, `"erv"`, `"rvi"`, `"vic"`, `"ice"`, `"ces"`, `"es "`
+
+Sentence 2: `"...services premium..."`
+- Trigrams: `"ser"`, `"erv"`, `"rvi"`, `"vic"`, `"ice"`, `"ces"`, `"es "`, `"s p"`, `" pr"`, `"pre"`, `"rem"`, `"emi"`, `"miu"`, `"ium"`, `"um "`
+
+**Shared trigrams (13):**
+- `"pre"`, `"rem"`, `"emi"`, `"miu"`, `"ium"`, `"um "` (from "premium")
+- `"ser"`, `"erv"`, `"rvi"`, `"vic"`, `"ice"`, `"ces"`, `"es "` (from "services")
+
+**Unique to Sentence 1 (2):**
+- `"m s"` (boundary: premium→services)
+- `" se"` (boundary: space→services)
+
+**Unique to Sentence 2 (2):**
+- `"s p"` (boundary: services→premium)
+- `" pr"` (boundary: space→premium)
+
+**Result:** 13 shared / 15 total unique = ~87% similarity for this phrase pair. When combined with the rest of the sentence (which matches exactly), the overall similarity is ~95%.
+
+Match 3: `"50% Save premium services on"` (heavily reordered)
+- Many trigrams still match (`" 50"`, `"50%"`, `" Sa"`, `"Sav"`, `"ave"`, `"ium"`, `"um "`, etc.)
+- But missing sequential trigrams like `"ve "`, `" 50"` (from "Save 50%")
+- Similarity: ~70% (moderate)
+
+Match 4: `"premium services 50% Save on"` (completely scrambled)
+- Still shares many trigrams, but fewer sequential matches
+- Similarity: ~60% (lower)
+
+**Why this works well for campaign detection:**
+- Campaign copies often have the same or very similar word order → high similarity
+- Paraphrased campaigns share many trigrams → moderate similarity (caught by Gemini)
+- Completely different campaigns share few trigrams → low similarity (filtered out)
+
 #### The Search Function
 
 ```sql
